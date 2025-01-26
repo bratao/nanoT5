@@ -10,6 +10,7 @@ precision: 'bf16'
 eval_only: false
 predict_only: false
 seed: 2137
+tokenizer: 'tokenizer-t5-gigaverbo'
 
 model:
     klass: hf_t5

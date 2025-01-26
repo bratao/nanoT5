@@ -4,6 +4,7 @@ import evaluate
 import torch
 from datasets.iterable_dataset import IterableDataset
 from huggingface_hub import HfApi
+from pathlib import Path
 
 from .logging_utils import Averager
 
@@ -13,9 +14,10 @@ def maybe_save_checkpoint(model, args):
         args.current_train_step > args.optim.total_steps
         or args.current_train_step % args.checkpoint.every_steps == 0
     ):
-        output_dir = f"checkpoint-{args.mode}-{args.current_train_step}"
-        model.save_pretrained(output_dir)
-        print(f"Saved checkpoint at {output_dir}")
+        current_path = Path(__file__).parents[1] / f"checkpoint-{args.mode}-{args.current_train_step}"
+        current_path.mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(current_path)
+        print(f"Saved checkpoint at {current_path}")
 
 
 def maybe_eval_predict(model, dataloader, logger, args, tokenizer):

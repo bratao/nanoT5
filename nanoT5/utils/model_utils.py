@@ -7,6 +7,7 @@ import torch.nn as nn
 from datasets.iterable_dataset import IterableDataset
 from omegaconf import open_dict
 from torch.utils.data import DataLoader
+from datasets import Features, Value, DatasetDict, Dataset
 from transformers import (
     AutoConfig,
     AutoTokenizer,

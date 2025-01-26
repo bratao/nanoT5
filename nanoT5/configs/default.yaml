@@ -14,6 +14,7 @@ tokenizer: 'tokenizer-t5-gigaverbo'
 
 model:
     klass: hf_t5
+    tokenizer: 'tokenizer-t5-gigaverbo'
     name: 'bratao/t5_gigaverbo'
     overwrite: # overwrite config with these values
         dropout_rate: 0.0
@@ -33,7 +34,7 @@ optim:
     name: precond_schedule_palm_foreach_soap # PrecondSchedulePaLMForeachSOAP
     base_lr: 1e-3
     batch_size: 256
-    total_steps: 65536
+    total_steps: 100000
     epochs: -1 # If it's > 0 it overwrites total_steps
     warmup_steps: 10000
     lr_scheduler: cosine
@@ -43,11 +44,11 @@ optim:
     final_cosine: 1e-5
 
 eval:
-    every_steps: 1000 # Eval once in the end
+    every_steps: 10000 # Eval once in the end
     steps: 500
 
 checkpoint:
-    every_steps: 5000 # Save checkpoint once in the end
+    every_steps: 10000 # Save checkpoint once in the end
 
 logging:
     every_steps: 5

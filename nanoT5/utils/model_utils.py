@@ -109,36 +109,6 @@ def get_tokenizer(args):
 
 def load_dataset_splits(args):
     if args.mode == "pt":
-        ds_cc = datasets.load_dataset("TucanoBR/GigaVerbo", streaming=True).shuffle(seed=args.seed).filter(lambda x: x['label'] == 1).select_columns(['text'])
-        
-        # Get 10000 examples from the ds_cc dataset to use as test set
-        examples = {"text": []}
-        for i, example in enumerate(ds_cc):
-            examples["text"].append(example["text"])
-            if i == 9999:
-                break
-
-        dataset_splits = {
-            "train": ds_cc["train"],
-            "test": datasets.Dataset.from_dict(examples),
-        }
-
-    elif args.mode == "ft":
-        dataset_splits = datasets.load_dataset(
-            args.data.exec_file_path,
-            data_dir=args.data.data_dir,
-            task_dir=args.data.task_dir,
-            max_num_instances_per_task=args.data.max_num_instances_per_task,
-            max_num_instances_per_eval_task=args.data.max_num_instances_per_task,
-        )
-    else:
-        raise NotImplementedError
-
-    return dataset_splits
-
-
-def load_dataset_splits(args):
-    if args.mode == "pt":
 
         df_fr = datasets.load_dataset("TucanoBR/GigaVerbo", streaming=True, split="train").filter(
             lambda x: x['label'] == 1).rename_column("text", "raw_content").select_columns(['raw_content'])
@@ -245,6 +215,43 @@ def get_data_collator(tokenizer, config, args):
 
     return data_collator
 
+    
+def process_dataset(dataset_splits, args, tokenizer):
+    if args.mode == "pt":
+        final_datasets = {}
+
+        for split, dataset_split in dataset_splits.items():
+            # We increase the input_length, because instead of masking tokens T5 replaces
+            # masked spans with a single token, therefore to avoid padding we need to have
+            # longer sequences at the start, before masking
+            before_mask_input_length, target_length = compute_input_and_target_lengths(
+                inputs_length=args.data.input_length,
+                noise_density=args.data.mlm_probability,
+                mean_noise_span_length=args.data.mean_noise_span_length,
+            )
+
+            with open_dict(args):
+                args.data.before_mask_input_length = before_mask_input_length
+                args.data.target_length = target_length
+
+            dataset_split = dataset_split.map(
+                tokenize_function,
+                batched=True,
+                fn_kwargs={
+                    "tokenizer": tokenizer,
+                    "in_length": before_mask_input_length,
+                },
+                remove_columns=["text"],
+            )
+
+            dataset_split = dataset_split.shuffle(buffer_size=10_000, seed=args.seed)
+            final_datasets[split] = dataset_split
+    elif args.mode == "ft":
+        final_datasets = dataset_splits
+    else:
+        raise NotImplementedError
+
+    return final_datasets
 
 def get_dataloaders(tokenizer, config, args):
     dataset_splits = load_dataset_splits(args)

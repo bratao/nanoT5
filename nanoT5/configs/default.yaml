@@ -48,7 +48,7 @@ eval:
     steps: 500
 
 checkpoint:
-    every_steps: 100 # Save checkpoint once in the end
+    every_steps: 10 # Save checkpoint once in the end
 
 logging:
     every_steps: 10

@@ -15,6 +15,7 @@ def maybe_save_checkpoint(model, args):
     ):
         output_dir = f"checkpoint-{args.mode}-{args.current_train_step}"
         model.save_pretrained(output_dir)
+        print(f"Saved checkpoint at {output_dir}")
 
 
 def maybe_eval_predict(model, dataloader, logger, args, tokenizer):

@@ -13,7 +13,7 @@ seed: 2137
 
 model:
     klass: hf_t5
-    name: 'Fizzarolli/t5-v1_1-base-improved'
+    name: 'bratao/t5_gigaverbo'
     overwrite: # overwrite config with these values
         dropout_rate: 0.0
     add_config: # add these values to the config

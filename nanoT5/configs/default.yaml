@@ -56,8 +56,8 @@ logging:
     use_wandb: true
     # Can remove or comment out the below if not using Weights & Biases
     wandb_config:
-        project: nanoT5
-        entity: 'fizzzz'
+        project: T5
+        entity: 'brataodream'
         tags: ['nanoT5']
         mode: 'online'
 

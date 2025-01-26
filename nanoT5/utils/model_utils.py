@@ -111,7 +111,7 @@ def load_dataset_splits(args):
     if args.mode == "pt":
 
         df_fr = datasets.load_dataset("TucanoBR/GigaVerbo", streaming=True, split="train").filter(
-            lambda x: x['label'] == 1).rename_column("text", "raw_content").select_columns(['raw_content'])
+            lambda x: x['label'] == 1).select_columns(['text'])
         df_fr = df_fr.shuffle(seed=42, buffer_size=1000).take(10_000_000)
 
         def get_dataset():
@@ -156,11 +156,13 @@ def load_dataset_splits(args):
 
         our_dataset = get_dataset()
 
-        df_output = our_dataset["train"].rename_column("output", "raw_content").select_columns(
-            ['raw_content']).to_iterable_dataset()
+        df_output = our_dataset["train"].rename_column("output", "text").select_columns(
+            ['text']).to_iterable_dataset()
+        
+        df_test = our_dataset["test"].rename_column("output", "text").select_columns(
+            ['text']).to_iterable_dataset()
 
-        df_test = our_dataset["test"].rename_column("output", "raw_content").select_columns(
-            ['raw_content']).to_iterable_dataset()
+
 
         # df = datasets.concatenate_datasets([df_fr, df_input, df_output])
         df = datasets.concatenate_datasets([df_fr, df_output])

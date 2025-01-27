@@ -165,7 +165,7 @@ def load_dataset_splits(args):
 
 
         # df = datasets.concatenate_datasets([df_fr, df_input, df_output])
-        df = datasets.concatenate_datasets([df_fr, df_output])
+        df = datasets.concatenate_datasets([df_fr, df_output]).shuffle(seed=42, buffer_size=1000)
 
 
         dataset_splits = {

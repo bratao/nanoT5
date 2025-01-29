@@ -11,7 +11,7 @@ eval_only: false
 predict_only: false
 seed: 2137
 tokenizer: 
-    name: '/home/gpu/bruno/t5/tokenizer-t5-gigaverbo-v2'
+    name: '/home/gpu/bruno/t5/tokenizer-t5-gigaverbo-v4'
 
 model:
     klass: hf_t5

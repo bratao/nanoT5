@@ -112,7 +112,7 @@ def load_dataset_splits(args):
 
         df_fr = datasets.load_dataset("TucanoBR/GigaVerbo", streaming=True, split="train").filter(
             lambda x: x['label'] == 1).select_columns(['text'])
-        df_fr = df_fr.shuffle(seed=42, buffer_size=1000).take(10_000_000)
+        df_fr = df_fr.shuffle(seed=42, buffer_size=1000).take(15_000_000)
 
         def get_dataset():
             features = Features({"input": Value("string"), "output": Value("string")})

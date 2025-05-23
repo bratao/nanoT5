@@ -40,7 +40,7 @@ def get_model(args, config):
         model = klass(config)
     else:
         assert (
-            klass == T5ForConditionalGeneration
+                klass == T5ForConditionalGeneration
         ), "To load HFs weights you need to use HF model"
         model = klass.from_pretrained(
             args.model.name,
@@ -62,8 +62,8 @@ def get_config(args, tokenizer: AutoTokenizer):
     if config.pad_token_id is None or config.pad_token_id != tokenizer.pad_token_id:
         config.pad_token_id = tokenizer.pad_token_id
     if (
-        config.decoder_start_token_id is None
-        or config.decoder_start_token_id != tokenizer.pad_token_id
+            config.decoder_start_token_id is None
+            or config.decoder_start_token_id != tokenizer.pad_token_id
     ):
         config.decoder_start_token_id = tokenizer.pad_token_id
     if config.eos_token_id is None or config.eos_token_id != tokenizer.eos_token_id:
@@ -94,7 +94,7 @@ def get_tokenizer(args):
 
     # check for pad token and eos token
     assert (
-        tokenizer.pad_token_id is not None and tokenizer.eos_token_id is not None
+            tokenizer.pad_token_id is not None and tokenizer.eos_token_id is not None
     ), "Tokenizer should have pad_token_id and eos_token_id"
 
     # check to make sure T5 special tokens are in tokenizer
@@ -109,17 +109,15 @@ def get_tokenizer(args):
 
 def load_dataset_splits(args):
     if args.mode == "pt":
-
+        # PT mode uses streaming and results in IterableDataset, this part remains unchanged
         df_fr = datasets.load_dataset("TucanoBR/GigaVerbo", streaming=True, split="train").filter(
             lambda x: x['label'] == 1).select_columns(['text'])
         df_fr = df_fr.shuffle(seed=42, buffer_size=1000).take(15_000_000)
 
-        def get_dataset():
+        def get_dataset_pt():  # Renamed to avoid conflict if get_dataset is used differently
             features = Features({"input": Value("string"), "output": Value("string")})
 
             files_names = ["wikipedia_train_ocr_cleaning.jsonl", "llama_finetune_train_ocr_cleaning.jsonl"]
-            # files_names = ["wikipedia_train_ocr_cleaning.jsonl"]
-
             train_data = {"input": [], "output": []}
             for files_name in files_names:
                 with open(Path(__file__).parents[1] / f"datasets/{files_name}", "r", encoding="utf-8") as f:
@@ -127,7 +125,6 @@ def load_dataset_splits(args):
                     data = [json.loads(d) for d in data]
                     if 'conversations' in data[0]:
                         for linha in data:
-                            # In this model, the 2 message is the input and the 3 message is the output
                             for i in range(1, len(linha['conversations']), 2):
                                 input_example = linha['conversations'][i]["value"]
                                 output_example = linha['conversations'][i + 1]["value"]
@@ -140,9 +137,6 @@ def load_dataset_splits(args):
                         train_data["output"] += [d["output"] for d in data]
 
             size = 500
-
-            # Trucate the test to only size examples and add the remaining to the training set
-
             test_data = {"input": train_data["input"][:size], "output": train_data["output"][:size]}
             train_data["input"] = train_data["input"][size:]
             train_data["output"] = train_data["output"][size:]
@@ -154,28 +148,22 @@ def load_dataset_splits(args):
                 }
             )
 
-        our_dataset = get_dataset()
-
-        df_output = our_dataset["train"].rename_column("output", "text").select_columns(
+        our_dataset_pt = get_dataset_pt()
+        df_output = our_dataset_pt["train"].rename_column("output", "text").select_columns(
             ['text']).to_iterable_dataset()
-        
-        df_test = our_dataset["test"].rename_column("output", "text").select_columns(
+        df_test_pt = our_dataset_pt["test"].rename_column("output", "text").select_columns(
             ['text']).to_iterable_dataset()
 
-
-
-        # df = datasets.concatenate_datasets([df_fr, df_input, df_output])
         df = datasets.concatenate_datasets([df_fr, df_output]).shuffle(seed=42, buffer_size=1000)
-
 
         dataset_splits = {
             "train": df,
-            "test": df_test,
+            "test": df_test_pt,
         }
 
     elif args.mode == "ft":
-
-        def get_dataset():
+        # Modification for FT mode starts here
+        def get_dataset_ft():  # Renamed to avoid conflict
             features = Features({"input": Value("string"), "output": Value("string")})
 
             files_names = ["llama_finetune_train_ocr_cleaning.jsonl"]
@@ -187,7 +175,6 @@ def load_dataset_splits(args):
                     data = [json.loads(d) for d in data]
                     if 'conversations' in data[0]:
                         for linha in data:
-                            # In this model, the 2 message is the input and the 3 message is the output
                             for i in range(1, len(linha['conversations']), 2):
                                 input_example = linha['conversations'][i]["value"]
                                 output_example = linha['conversations'][i + 1]["value"]
@@ -200,34 +187,33 @@ def load_dataset_splits(args):
                         train_data["output"] += [d["output"] for d in data]
 
             size = 1000
-
-            # Trucate the test to only size examples and add the remaining to the training set
-
             test_data = {"input": train_data["input"][:size], "output": train_data["output"][:size]}
             train_data["input"] = train_data["input"][size:]
             train_data["output"] = train_data["output"][size:]
 
             return DatasetDict(
                 {
-                    "train": Dataset.from_dict(train_data, features=features),
-                    "test": Dataset.from_dict(test_data, features=features),
+                    "train": Dataset.from_dict(train_data, features=features),  # Returns datasets.Dataset
+                    "test": Dataset.from_dict(test_data, features=features),  # Returns datasets.Dataset
                 }
             )
 
-        our_dataset = get_dataset()
+        our_dataset_ft = get_dataset_ft()
 
-        df_output = our_dataset["train"].rename_column("output", "text").select_columns(
-            ['text']).to_iterable_dataset()
+        # Keep as datasets.Dataset, which has len()
+        # Process and shuffle the training dataset
+        train_dataset = our_dataset_ft["train"].rename_column("output", "text").select_columns(['text'])
+        train_dataset_shuffled = train_dataset.shuffle(seed=42)  # datasets.Dataset.shuffle()
 
-        df_test = our_dataset["test"].rename_column("output", "text").select_columns(
-            ['text']).to_iterable_dataset()
-
-        df = df_output.shuffle(seed=42)
+        # Process the test dataset
+        test_dataset = our_dataset_ft["test"].rename_column("output", "text").select_columns(['text'])
+        # No .to_iterable_dataset() call
 
         dataset_splits = {
-            "train": df,
-            "test": df_test,
+            "train": train_dataset_shuffled,  # This is a datasets.Dataset
+            "test": test_dataset,  # This is a datasets.Dataset
         }
+        # Modification for FT mode ends here
 
     else:
         raise NotImplementedError
@@ -265,7 +251,7 @@ def get_data_collator(tokenizer, config, args):
 
     return data_collator
 
-    
+
 def process_dataset(dataset_splits, args, tokenizer):
     if args.mode == "pt":
         final_datasets = {}
@@ -302,6 +288,7 @@ def process_dataset(dataset_splits, args, tokenizer):
         raise NotImplementedError
 
     return final_datasets
+
 
 def get_dataloaders(tokenizer, config, args):
     dataset_splits = load_dataset_splits(args)
@@ -342,8 +329,8 @@ def get_dataloaders(tokenizer, config, args):
         if args.optim.epochs > 0:
             # assert not is_iterable
             args.optim.total_steps = (
-                len(dataloaders["train"]) // args.optim.grad_acc
-            ) * args.optim.epochs
+                                             len(dataloaders["train"]) // args.optim.grad_acc
+                                     ) * args.optim.epochs
 
         args.eval.corrected_steps = args.eval.steps
 
@@ -467,7 +454,7 @@ def get_lr_scheduler(optimizer, args, logger):
         scheduler2 = LinearLR(
             optimizer,
             start_factor=(
-                min(1e-2, 1.0 / math.sqrt(num_steps_optimizer1)) / args.optim.base_lr
+                    min(1e-2, 1.0 / math.sqrt(num_steps_optimizer1)) / args.optim.base_lr
             ),
             end_factor=0,
             total_iters=iters_left_for_optimizer2,
@@ -494,7 +481,7 @@ def get_lr_scheduler(optimizer, args, logger):
 
 
 def model_summary(
-    model: PreTrainedModel, max_depth: int = 4, show_input_size: bool = False
+        model: PreTrainedModel, max_depth: int = 4, show_input_size: bool = False
 ) -> None:
     """
     Prints an accurate summary of the model, avoiding double-counting of parameters.
@@ -518,7 +505,7 @@ def model_summary(
         return total_params, trainable_params
 
     def recursive_summarize(
-        module: nn.Module, depth: int, idx: List[int], prefix: str = ""
+            module: nn.Module, depth: int, idx: List[int], prefix: str = ""
     ) -> List[Tuple[str, int, int, int, Optional[List[int]], nn.Module]]:
         summary = []
 

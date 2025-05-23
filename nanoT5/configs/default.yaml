@@ -18,8 +18,6 @@ model:
     name: 'bratao/portugueseT5'
     overwrite: # overwrite config with these values
         dropout_rate: 0.0
-    add_config: # add these values to the config
-        is_bf16: false
     checkpoint_path: ''
     random_init: false
     compile: true # Pytorch 2.0

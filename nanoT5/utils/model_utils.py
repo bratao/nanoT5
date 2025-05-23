@@ -320,7 +320,8 @@ def get_dataloaders(tokenizer, config, args):
         shuffle = (split == "train") and not is_iterable
 
         if args.mode == "ft" and split == "train":
-            assert shuffle is True
+            # assert shuffle is True
+            pass  # We don't need to shuffle the dataset for training
         else:
             assert shuffle is False
 

@@ -174,13 +174,61 @@ def load_dataset_splits(args):
         }
 
     elif args.mode == "ft":
-        dataset_splits = datasets.load_dataset(
-            args.data.exec_file_path,
-            data_dir=args.data.data_dir,
-            task_dir=args.data.task_dir,
-            max_num_instances_per_task=args.data.max_num_instances_per_task,
-            max_num_instances_per_eval_task=args.data.max_num_instances_per_task,
-        )
+
+        def get_dataset():
+            features = Features({"input": Value("string"), "output": Value("string")})
+
+            files_names = ["llama_finetune_train_ocr_cleaning.jsonl"]
+
+            train_data = {"input": [], "output": []}
+            for files_name in files_names:
+                with open(Path(__file__).parents[1] / f"datasets/{files_name}", "r", encoding="utf-8") as f:
+                    data = f.readlines()
+                    data = [json.loads(d) for d in data]
+                    if 'conversations' in data[0]:
+                        for linha in data:
+                            # In this model, the 2 message is the input and the 3 message is the output
+                            for i in range(1, len(linha['conversations']), 2):
+                                input_example = linha['conversations'][i]["value"]
+                                output_example = linha['conversations'][i + 1]["value"]
+
+                                if input_example and output_example:
+                                    train_data["input"].append(input_example)
+                                    train_data["output"].append(output_example)
+                    else:
+                        train_data["input"] += [d["input"] for d in data]
+                        train_data["output"] += [d["output"] for d in data]
+
+            size = 1000
+
+            # Trucate the test to only size examples and add the remaining to the training set
+
+            test_data = {"input": train_data["input"][:size], "output": train_data["output"][:size]}
+            train_data["input"] = train_data["input"][size:]
+            train_data["output"] = train_data["output"][size:]
+
+            return DatasetDict(
+                {
+                    "train": Dataset.from_dict(train_data, features=features),
+                    "test": Dataset.from_dict(test_data, features=features),
+                }
+            )
+
+        our_dataset = get_dataset()
+
+        df_output = our_dataset["train"].rename_column("output", "text").select_columns(
+            ['text']).to_iterable_dataset()
+
+        df_test = our_dataset["test"].rename_column("output", "text").select_columns(
+            ['text']).to_iterable_dataset()
+
+        df = datasets.concatenate_datasets([df_output]).shuffle(seed=42, buffer_size=1000)
+
+        dataset_splits = {
+            "train": df,
+            "test": df_test,
+        }
+
     else:
         raise NotImplementedError
 

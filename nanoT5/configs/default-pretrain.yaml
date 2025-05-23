@@ -1,21 +1,21 @@
 defaults:
     - _self_
-    - task: ft
+    - task: pt
     - local_env: default
 
 # Experiment args
-mode: 'ft'
+mode: 'pt'
 device: gpu
 precision: 'bf16'
 eval_only: false
 predict_only: false
 seed: 2137
 tokenizer: 
-    name: 'bratao/portugueseT5'
+    name: '/home/gpu/bruno/t5/tokenizer-t5-gigaverbo-v4'
 
 model:
     klass: hf_t5
-    name: 'bratao/portugueseT5'
+    name: 'google/t5-v1_1-large'
     overwrite: # overwrite config with these values
         dropout_rate: 0.0
     add_config: # add these values to the config
@@ -25,16 +25,10 @@ model:
     compile: true # Pytorch 2.0
 
 data:
-  max_seq_len: 2048
-  max_target_len: 1024
-  max_num_instances_per_task: 100
-  add_task_name: False
-  add_task_definition: True
-  num_pos_examples: 2
-  num_neg_examples: 0
-  add_explanation: False
-  tk_instruct: False
-
+    input_length: 512
+    mlm_probability: 0.15
+    mean_noise_span_length: 3.0
+    num_workers: 8
 
 optim:
 

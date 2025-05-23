@@ -297,40 +297,102 @@ def get_dataloaders(tokenizer, config, args):
     )
     data_collator = get_data_collator(tokenizer=tokenizer, config=config, args=args)
 
-    is_iterable = isinstance(dataset["train"], IterableDataset)
-
     dataloaders = {}
+
+    # Prepare a generator for the training DataLoader if it's map-style (needs shuffling).
+    # The device of this generator must match the device torch.randperm will target for its output.
+    # The error "Expected a 'cuda' device type for generator but found 'cpu'" implies
+    # torch.randperm is attempting to create its output tensor on CUDA.
+    train_dataloader_generator = None
+    # Check if the training dataset is map-style (i.e., not IterableDataset)
+    # because DataLoader's shuffle=True only applies to map-style datasets.
+    if not isinstance(dataset["train"], IterableDataset):
+        generator_device_type = 'cpu'  # Default to CPU generator
+        if torch.cuda.is_available():
+            # If CUDA is available AND the specific error occurs,
+            # it strongly suggests randperm is targeting CUDA (likely due to a global default device setting).
+            # In this scenario, the generator must also be a CUDA generator.
+            # We make this choice based on the error message provided by the user.
+            generator_device_type = 'cuda'  # This will use torch.cuda.current_device() by default for torch.Generator
+
+        train_dataloader_generator = torch.Generator(device=generator_device_type)
+        if args.seed is not None:
+            train_dataloader_generator.manual_seed(args.seed)
+        else:
+            # Seed with a random value if no global seed is provided.
+            # Use a CPU generator to get a seed value to avoid device mismatches during seed generation itself.
+            temp_seed_gen = torch.Generator(device='cpu')
+            # Ensure the seed is a Python int
+            temp_seed_gen.manual_seed(int(torch.empty((), dtype=torch.int64, device='cpu').random_().item()))
+            train_dataloader_generator.manual_seed(temp_seed_gen.initial_seed())
 
     for split in ["train", "test"]:
         batch_size = args.optim.batch_size // args.optim.grad_acc
 
-        shuffle = (split == "train") and not is_iterable
+        current_dataset_is_iterable = isinstance(dataset[split], IterableDataset)
 
-        if args.mode == "ft" and split == "train":
-            # assert shuffle is True
-            pass  # We don't need to shuffle the dataset for training
-        else:
-            assert shuffle is False
+        # DataLoader's shuffle parameter is for map-style datasets.
+        # Iterable datasets handle their own shuffling (e.g., .shuffle() method) or are inherently ordered.
+        dataloader_should_shuffle = (split == "train") and not current_dataset_is_iterable
+
+        # Determine which generator to use for the current DataLoader instance
+        current_loader_generator = None
+        if dataloader_should_shuffle:  # This is true only for train split if it's map-style
+            current_loader_generator = train_dataloader_generator
+
+        # Optional: Add assertions to verify shuffle logic based on mode and split
+        # For example:
+        # if args.mode == "ft":
+        #     if split == "train": assert dataloader_should_shuffle, "FT train DataLoader should be shuffling."
+        #     else: assert not dataloader_should_shuffle, "FT test DataLoader should not be shuffling."
+        # elif args.mode == "pt":
+        #     assert not dataloader_should_shuffle, f"PT {split} DataLoader (iterable) should not be shuffling."
 
         dataloaders[split] = DataLoader(
             dataset[split],
-            shuffle=shuffle,
+            shuffle=dataloader_should_shuffle,
             collate_fn=data_collator,
             batch_size=batch_size,
             drop_last=False,
+            generator=current_loader_generator,
+            num_workers=getattr(args.data, "num_workers", 0),  # Default to 0 if not specified
+            pin_memory=torch.cuda.is_available() and getattr(args.data, "num_workers", 0) > 0
         )
 
     # Add & Check args about data loaders
     with open_dict(args):
-        if not is_iterable:
+        if not isinstance(dataset["train"], IterableDataset):
             args.data.train_batches = len(dataloaders["train"])
+        # else: train_batches for iterable datasets might be set differently or not used.
+
+        if not isinstance(dataset["test"], IterableDataset):
             args.data.test_batches = len(dataloaders["test"])
+        # else: test_batches for iterable datasets.
 
         if args.optim.epochs > 0:
-            # assert not is_iterable
-            args.optim.total_steps = (
-                                             len(dataloaders["train"]) // args.optim.grad_acc
-                                     ) * args.optim.epochs
+            if isinstance(dataset["train"], IterableDataset):
+                # This case means epochs > 0 with an iterable dataset.
+                # total_steps should ideally be set directly in args, as len(dataloader) is not available.
+                if not hasattr(args.optim, 'total_steps') or args.optim.total_steps is None:
+                    # This was the original point of failure for iterable datasets.
+                    # If total_steps is not pre-set, this configuration is problematic.
+                    # You might want to raise an error or log a clear warning.
+                    print(
+                        "Warning: args.optim.epochs > 0 is set for an IterableDataset (train), "
+                        "but args.optim.total_steps is not defined. "
+                        "Length-based calculation of total_steps is not possible for IterableDatasets."
+                    )
+                    # Or, raise ValueError("args.optim.total_steps must be set if args.optim.epochs > 0 for an IterableDataset.")
+            else:  # Map-style dataset (e.g., 'ft' mode after previous fix)
+                args.optim.total_steps = (
+                                                 len(dataloaders["train"]) // args.optim.grad_acc
+                                         ) * args.optim.epochs
+
+        # It's good practice to ensure total_steps is defined if training is to occur.
+        # This might depend on whether training is by epochs or by a fixed number of steps.
+        # If args.optim.total_steps is still None here, it might indicate a configuration issue.
+        # if not hasattr(args.optim, 'total_steps') or args.optim.total_steps is None:
+        #     raise ValueError("args.optim.total_steps must be defined for training.")
 
         args.eval.corrected_steps = args.eval.steps
 

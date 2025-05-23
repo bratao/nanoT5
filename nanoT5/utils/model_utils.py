@@ -372,7 +372,7 @@ def get_optimizer(model, args):
     ]
 
     if args.optim.name == "adamw":
-        from transformers import AdamW
+        from torch.optim import AdamW
 
         optimizer = AdamW(
             optimizer_grouped_parameters,

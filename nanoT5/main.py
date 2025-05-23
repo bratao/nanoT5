@@ -4,7 +4,7 @@ import hydra
 import torch
 from omegaconf import open_dict
 
-from utils import (
+from .utils import (
     eval,
     get_config,
     get_dataloaders,
